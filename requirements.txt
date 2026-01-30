@@ -8,17 +8,11 @@ uvicorn[standard]>=0.23.0
 jinja2>=3.1.0
 python-multipart>=0.0.6
 
-# Google ADK - Agent Framework
-# Note: These packages may need to be installed separately or from specific sources
-# google-genai>=0.2.0
-# google-adk>=0.1.0
+# Google Gemini API
+google-genai>=1.0.0
 
 # Neo4j - Graph Database
 neo4j>=5.15.0
-
-# Phoenix - Observability (optional)
-# phoenix>=3.0.0
-# openinference[google-genai]>=1.0.0
 
 # Utilities
 python-dotenv>=1.0.0
