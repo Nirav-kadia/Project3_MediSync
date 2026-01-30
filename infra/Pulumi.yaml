@@ -1,0 +1,11 @@
+name: pro3_medisync
+description: this is project 3
+runtime:
+  name: python
+  options:
+    toolchain: pip
+    virtualenv: venv
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: aws-python
