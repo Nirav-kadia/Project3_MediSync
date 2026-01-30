@@ -9,16 +9,22 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables from .env file (for local development)
+# In CI/CD, environment variables are set directly by the workflow
 env_path = Path(__file__).parent.parent / ".env"
-load_dotenv(env_path)
+if env_path.exists():
+    load_dotenv(env_path)
+    print(f"Loaded .env file from: {env_path}")
+else:
+    print("No .env file found, using environment variables from system")
 
 # Configuration
 config = pulumi.Config()
 app_name = "medisync"
 container_port = 5001  # FastHTML default port
 
-# Get all secrets from .env file
+# Get all secrets from environment variables
+# These can come from .env file (local) or GitHub secrets (CI/CD)
 neo4j_uri = os.getenv("NEO4J_URI")
 neo4j_user = os.getenv("NEO4J_USER")
 neo4j_password = os.getenv("NEO4J_PASSWORD")
@@ -26,15 +32,15 @@ google_api_key = os.getenv("GOOGLE_API_KEY")
 
 # Validate required secrets
 if not neo4j_uri:
-    raise Exception("NEO4J_URI not found in .env file")
+    raise Exception("NEO4J_URI not found in environment variables or .env file")
 if not neo4j_user:
-    raise Exception("NEO4J_USER not found in .env file")
+    raise Exception("NEO4J_USER not found in environment variables or .env file")
 if not neo4j_password:
-    raise Exception("NEO4J_PASSWORD not found in .env file")
+    raise Exception("NEO4J_PASSWORD not found in environment variables or .env file")
 if not google_api_key:
-    raise Exception("GOOGLE_API_KEY not found in .env file")
+    raise Exception("GOOGLE_API_KEY not found in environment variables or .env file")
 
-print("Loaded configuration from .env file")
+print("Loaded configuration successfully")
 print(f"   NEO4J_URI: {neo4j_uri}")
 print(f"   NEO4J_USER: {neo4j_user}")
 print(f"   GOOGLE_API_KEY: {'*' * 20}")
