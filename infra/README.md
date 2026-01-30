@@ -1,92 +1,223 @@
- # AWS Python S3 Bucket Pulumi Template
+# MediSync Infrastructure Deployment
 
- A minimal Pulumi template for provisioning a single AWS S3 bucket using Python.
+This directory contains Pulumi infrastructure-as-code for deploying MediSync to AWS ECS Fargate.
 
- ## Overview
+## Architecture
 
- This template provisions an S3 bucket (`pulumi_aws.s3.BucketV2`) in your AWS account and exports its ID as an output. It’s an ideal starting point when:
-  - You want to learn Pulumi with AWS in Python.
-  - You need a barebones S3 bucket deployment to build upon.
-  - You prefer a minimal template without extra dependencies.
+- **ECS Fargate**: Serverless container orchestration
+- **Application Load Balancer**: HTTP/HTTPS traffic distribution
+- **ECR**: Docker image registry
+- **CloudWatch**: Logging and monitoring
+- **Neo4j AuraDB**: External managed graph database
 
- ## Prerequisites
+## Prerequisites
 
- - An AWS account with permissions to create S3 buckets.
- - AWS credentials configured in your environment (for example via AWS CLI or environment variables).
- - Python 3.6 or later installed.
- - Pulumi CLI already installed and logged in.
+1. **AWS Account** with appropriate permissions
+2. **Pulumi Account** (free tier works)
+3. **AWS CLI** configured
+4. **Pulumi CLI** installed
+5. **Docker** installed
 
- ## Getting Started
+## Setup Instructions
 
- 1. Generate a new project from this template:
-    ```bash
-    pulumi new aws-python
-    ```
- 2. Follow the prompts to set your project name and AWS region (default: `us-east-1`).
- 3. Change into your project directory:
-    ```bash
-    cd <project-name>
-    ```
- 4. Preview the planned changes:
-    ```bash
-    pulumi preview
-    ```
- 5. Deploy the stack:
-    ```bash
-    pulumi up
-    ```
- 6. Tear down when finished:
-    ```bash
-    pulumi destroy
-    ```
+### 1. Install Pulumi
 
- ## Project Layout
+```bash
+# Windows (PowerShell)
+choco install pulumi
 
- After running `pulumi new`, your directory will look like:
- ```
- ├── __main__.py         # Entry point of the Pulumi program
- ├── Pulumi.yaml         # Project metadata and template configuration
- ├── requirements.txt    # Python dependencies
- └── Pulumi.<stack>.yaml # Stack-specific configuration (e.g., Pulumi.dev.yaml)
- ```
+# Or download from: https://www.pulumi.com/docs/install/
+```
 
- ## Configuration
+### 2. Configure Pulumi
 
- This template defines the following config value:
+```bash
+cd infra
 
- - `aws:region` (string)
-   The AWS region to deploy resources into.
-   Default: `us-east-1`
+# Login to Pulumi (creates free account if needed)
+pulumi login
 
- View or update configuration with:
- ```bash
- pulumi config get aws:region
- pulumi config set aws:region us-west-2
- ```
+# Create a new stack (or select existing)
+pulumi stack init dev
 
- ## Outputs
+# Set AWS region
+pulumi config set aws:region us-east-1
+```
 
- Once deployed, the stack exports:
+### 3. Set Secrets
 
- - `bucket_name` — the ID of the created S3 bucket.
+```bash
+# Set your secrets (these are encrypted)
+pulumi config set --secret neo4j_password "your-neo4j-password"
+pulumi config set --secret google_api_key "your-google-api-key"
 
- Retrieve outputs with:
- ```bash
- pulumi stack output bucket_name
- ```
+# Optional: Override defaults
+pulumi config set --secret neo4j_uri "neo4j+ssc://your-instance.databases.neo4j.io"
+pulumi config set --secret neo4j_user "neo4j"
+```
 
- ## Next Steps
+### 4. Deploy Infrastructure
 
- - Customize `__main__.py` to add or configure additional resources.
- - Explore the Pulumi AWS SDK: https://www.pulumi.com/registry/packages/aws/
- - Break your infrastructure into modules for better organization.
- - Integrate into CI/CD pipelines for automated deployments.
+```bash
+# Preview changes
+pulumi preview
 
- ## Help and Community
+# Deploy
+pulumi up
+```
 
- If you have questions or need assistance:
- - Pulumi Documentation: https://www.pulumi.com/docs/
- - Community Slack: https://slack.pulumi.com/
- - GitHub Issues: https://github.com/pulumi/pulumi/issues
+This will create:
+- ECR repository
+- ECS cluster and service
+- Application Load Balancer
+- Security groups
+- IAM roles
+- CloudWatch log groups
 
- Contributions and feedback are always welcome!
+### 5. Build and Push Docker Image
+
+```bash
+# Get ECR repository URL
+ECR_REPO=$(pulumi stack output ecr_repo_url)
+
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR_REPO
+
+# Build image (from project root)
+cd ..
+docker build -t medisync .
+
+# Tag and push
+docker tag medisync:latest $ECR_REPO:latest
+docker push $ECR_REPO:latest
+```
+
+### 6. Force Service Update
+
+```bash
+cd infra
+
+# Get cluster and service names
+CLUSTER=$(pulumi stack output cluster_name)
+SERVICE=$(pulumi stack output service_name)
+
+# Force new deployment
+aws ecs update-service \
+  --cluster $CLUSTER \
+  --service $SERVICE \
+  --force-new-deployment \
+  --region us-east-1
+```
+
+### 7. Access Your Application
+
+```bash
+# Get the ALB URL
+pulumi stack output alb_url
+```
+
+Visit the URL in your browser!
+
+## GitHub Actions CI/CD
+
+To enable automatic deployments:
+
+### 1. Set GitHub Secrets
+
+Go to your repository Settings → Secrets and variables → Actions, and add:
+
+- `AWS_ACCESS_KEY_ID`: Your AWS access key
+- `AWS_SECRET_ACCESS_KEY`: Your AWS secret key
+- `PULUMI_ACCESS_TOKEN`: From https://app.pulumi.com/account/tokens
+
+### 2. Push to Main Branch
+
+```bash
+git add .
+git commit -m "Deploy infrastructure"
+git push origin main
+```
+
+The GitHub Action will automatically:
+1. Build Docker image
+2. Push to ECR
+3. Deploy infrastructure with Pulumi
+4. Update ECS service
+
+## Monitoring
+
+### View Logs
+
+```bash
+# Get log group name
+LOG_GROUP=$(pulumi stack output log_group_name)
+
+# Stream logs
+aws logs tail $LOG_GROUP --follow --region us-east-1
+```
+
+### Check Service Status
+
+```bash
+CLUSTER=$(pulumi stack output cluster_name)
+SERVICE=$(pulumi stack output service_name)
+
+aws ecs describe-services \
+  --cluster $CLUSTER \
+  --services $SERVICE \
+  --region us-east-1
+```
+
+## Costs
+
+Estimated monthly costs (us-east-1):
+- ECS Fargate (0.5 vCPU, 1GB RAM): ~$15/month
+- Application Load Balancer: ~$16/month
+- Data transfer: Variable
+- **Total: ~$31/month** (excluding Neo4j AuraDB)
+
+## Cleanup
+
+To destroy all resources:
+
+```bash
+cd infra
+pulumi destroy
+```
+
+## Troubleshooting
+
+### Service won't start
+
+Check logs:
+```bash
+aws logs tail /ecs/medisync --follow --region us-east-1
+```
+
+### Health checks failing
+
+- Ensure container port (5001) matches target group port
+- Check security group allows ALB → ECS traffic
+- Verify application starts successfully
+
+### Can't connect to Neo4j
+
+- Verify Neo4j AuraDB credentials in Pulumi config
+- Check Neo4j instance is running
+- Ensure IP whitelist includes AWS region IPs
+
+## Configuration Reference
+
+| Config Key | Required | Default | Description |
+|------------|----------|---------|-------------|
+| `neo4j_uri` | No | From .env | Neo4j connection URI |
+| `neo4j_user` | No | `neo4j` | Neo4j username |
+| `neo4j_password` | Yes | - | Neo4j password |
+| `google_api_key` | Yes | - | Google Gemini API key |
+
+## Support
+
+For issues:
+1. Check CloudWatch logs
+2. Verify Pulumi config: `pulumi config`
+3. Check ECS service events in AWS Console

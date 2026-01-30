@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Infrastructure
+infra/
+docker-compose.yml
+
+# Environment
+.env
+.env.*
+
+# Testing
+scripts/
+test_connection.py
+
+# Misc
+*.log
+.DS_Store
